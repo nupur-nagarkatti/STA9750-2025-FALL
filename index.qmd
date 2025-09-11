@@ -1,0 +1,38 @@
+---
+title: "Nupur Nagarkatti – STA 9750 Mini Project"
+---
+Hi, my name is Nupur Nagarkatti. I am a medical doctor (MBBS) with 5 years of postdoctoral research experience at Yale School of Medicine, where I worked in gynecologic oncology, surgical oncology, and endocrinology.  
+
+My research at Yale sparked a deep interest in applying machine learning and data science to medicine — from analyzing complex datasets like continuous glucose monitoring and neuroimaging, to exploring applications in diagnostics and healthcare innovation.  
+
+I am currently pursuing graduate studies in statistics and data science. This website is part of a course mini-project, and I plan to use it as a space to share my academic journey, projects, and experiments at the intersection of medicine and machine learning.  
+
+```{r}
+#| include: false
+1+1
+```
+
+Last Updated: `r format(Sys.time(), "%A %B %d, %Y at %H:%M %p")`
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+if(!require("leaflet")){
+    options(repos=c(CRAN="https://cloud.r-project.org"))
+    install.packages("leaflet")
+    stopifnot(require("leaflet"))
+}
+
+baruch_longitude <- -73.98333
+baruch_latitude  <- +40.75028
+
+leaflet() |>
+  addTiles() |>
+  setView(baruch_longitude, baruch_latitude, zoom=17) |>
+  addPopups(baruch_longitude, baruch_latitude, 
+            "I am a Master's student at <b>Baruch College</b>!")
+```
+
+
