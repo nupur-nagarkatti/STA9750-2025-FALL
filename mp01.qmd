@@ -27,7 +27,6 @@ The results are presented in the form of press releases, blending statistical fi
 ## Task 1: Data Acquisition
 
 ```{r download, message=FALSE, warning=FALSE}
-# Create folder & download the two Netflix TSVs (saved with .csv names per assignment)
 if (!dir.exists(file.path("data", "mp01"))) {
   dir.create(file.path("data", "mp01"), showWarnings = FALSE, recursive = TRUE)
 }
@@ -51,58 +50,72 @@ if (!file.exists(COUNTRY_TOP_10_FILENAME)) {
 ```
 
 ```{r verify-downloads, echo=TRUE}
-# Show that files exist and have non-zero size
+
 list.files("data/mp01")
 
 file.info("data/mp01/global_top10_alltime.csv")[, c("size","mtime")]
 file.info("data/mp01/country_top10_alltime.csv")[, c("size","mtime")]
 ```
 
-## Task 2: Import & Clean (Global table)
 
-```{r import-global, echo=TRUE, message=FALSE, warning=FALSE}
-# Packages
-if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
-if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
+## Task 2: Import & Clean (Global table)
+```{r}
 library(readr)
 library(dplyr)
 
-# Import global table
-GLOBAL_TOP_10 <- readr::read_tsv(GLOBAL_TOP_10_FILENAME, show_col_types = FALSE)
-
-# Fix "N/A" -> NA in season_title
-GLOBAL_TOP_10 <- GLOBAL_TOP_10 |>
-  dplyr::mutate(season_title = dplyr::if_else(season_title == "N/A",
-                                              NA_character_, season_title))
-
-# Brief confirmation summary (shows in report, code hidden)
-GLOBAL_TOP_10 |>
-  dplyr::summarise(
-    total_rows = dplyr::n(),
-    na_in_season_title = sum(is.na(season_title))
-  )
-```
-
-## Task 3: Import with NA handling (Country table)
-
-```{r import-country, echo=TRUE, message=FALSE, warning=FALSE}
-COUNTRY_TOP_10 <- readr::read_tsv(
-  COUNTRY_TOP_10_FILENAME,
-  na = c("N/A", ""),
+GLOBAL_TOP_10 <- read_tsv(
+  GLOBAL_TOP_10_FILENAME,
   show_col_types = FALSE
 )
 
-# Sanity check: number of literal "N/A" strings left should be 0
-zero_na_strings <- sum(COUNTRY_TOP_10$season_title == "N/A", na.rm = TRUE)
-zero_na_strings
+GLOBAL_TOP_10 <- GLOBAL_TOP_10 |>
+  mutate(
+    season_title = if_else(season_title == "N/A", NA_character_, season_title)
+  )
+
+sum(is.na(GLOBAL_TOP_10$season_title))
+str(GLOBAL_TOP_10)
+```
+## Task 3: Import with NA handling (Country table)
+```{r}
+library(readr)
+library(dplyr)
+
+COUNTRY_TOP_10 <- read_tsv(
+  COUNTRY_TOP_10_FILENAME,
+  na = "N/A",
+  show_col_types = FALSE
+)
+
+COUNTRY_TOP_10 <- COUNTRY_TOP_10 |>
+  mutate(
+    weekly_rank = as.integer(weekly_rank)
+  )
+
+sum(COUNTRY_TOP_10$season_title == "N/A", na.rm = TRUE)
+str(COUNTRY_TOP_10)
 ```
 
+## Initial Data and Exploration
+
+Before answering the 10 questions, it’s useful to take a first look at the dataset.  
+The table below shows the first 10 rows so we can see the variables and their structure.
+
+```{r}
+library(DT)
+
+datatable(
+  head(COUNTRY_TOP_10, 10),
+  options = list(pageLength = 10, scrollX = TRUE, searching = FALSE, info = FALSE),
+  caption = "Preview of the Country Top 10 data (first 10 rows)."
+)
+```
 ## Task 4: Exploratory Questions
 
 ### Q1. How many countries?
 
 ```{r q1-countries, echo=TRUE, message=FALSE, warning=FALSE}
-# Count distinct countries (your data has `country_name`)
+
 countries_n <- COUNTRY_TOP_10 |>
   dplyr::distinct(country_name) |>
   nrow()
@@ -134,7 +147,7 @@ noneng_weeks <- noneng_top$max_weeks[[1]]
 ### Q3. Longest film (in minutes) to appear in the Global Top 10
 
 ```{r q3-longest-film, echo=TRUE, message=FALSE, warning=FALSE}
-# Look at Films (English & Non-English), keep rows with known runtime, convert to minutes
+
 longest_film <- GLOBAL_TOP_10 |>
   dplyr::filter(grepl("^Films", category)) |>
   dplyr::filter(!is.na(runtime)) |>
@@ -150,7 +163,7 @@ longest_minutes <- longest_film$runtime_minutes[[1]]
 ### Q4. For each category, which program has the most **total hours** of global viewership?
 
 ```{r q4-top-hours, echo=TRUE, message=FALSE, warning=FALSE}
-# Sum hours across all weeks, per (category, title); pick the top per category
+
 if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
 if (!requireNamespace("DT", quietly = TRUE)) install.packages("DT")
 library(scales)
@@ -173,7 +186,7 @@ DT::datatable(
 ### Q5. Which TV show had the longest run in a country’s Top 10?
 
 ```{r q5-longest-run, echo=TRUE, message=FALSE, warning=FALSE}
-# Longest *consecutive* run: detect continuity by 7-day gaps
+
 tv_runs <- COUNTRY_TOP_10 |>
   dplyr::filter(grepl("^TV", category)) |>
   dplyr::arrange(country_name, show_title, season_title, week) |>
@@ -227,14 +240,14 @@ short_last    <- short_hist$last_week[[1]]
 ### Q7. What is the total global viewership (hours) of *Squid Game* across all seasons?
 
 ```{r q7-squid-hours, echo=TRUE, message=FALSE, warning=FALSE}
-# Sum global hours for all seasons of Squid Game in the global table
+
 squid <- GLOBAL_TOP_10 |>
   dplyr::filter(grepl("^TV", category),
                 show_title == "Squid Game")
 
 squid_total_hours <- sum(squid$weekly_hours_viewed, na.rm = TRUE)
 
-# (optional) per-season breakdown
+
 squid_by_season <- squid |>
   dplyr::group_by(season_title) |>
   dplyr::summarise(total_hours = sum(weekly_hours_viewed, na.rm = TRUE),
@@ -265,13 +278,13 @@ rn_2021_views <- rn_2021_hours / rn_runtime_hours
 ### Q9. How many Films reached #1 in the US but did not debut at #1? Which is the most recent?
 
 ```{r q9-us-films, echo=TRUE, message=FALSE, warning=FALSE}
-# Filter US films (both English & Non-English)
+
 us_films <- COUNTRY_TOP_10 |>
   dplyr::filter(grepl("^Films", category),
                 country_iso2 == "US" | country_name == "United States") |>
   dplyr::arrange(show_title, week)
 
-# Debut info per film in the US
+
 debut <- us_films |>
   dplyr::group_by(show_title) |>
   dplyr::summarise(
@@ -280,13 +293,11 @@ debut <- us_films |>
     .groups = "drop"
   )
 
-# First week the film hit #1 in the US (if ever)
 first_no1 <- us_films |>
   dplyr::filter(weekly_rank == 1) |>
   dplyr::group_by(show_title) |>
   dplyr::summarise(first_no1_week = min(week), .groups = "drop")
 
-# Merge + compute climbers
 film_summ <- debut |>
   dplyr::left_join(first_no1, by = "show_title") |>
   dplyr::mutate(ever_no1 = !is.na(first_no1_week))
@@ -313,12 +324,10 @@ The most recent was **`r mr_title`**, which debuted at **`r mr_debut_rank`** and
 tv_only <- COUNTRY_TOP_10 |>
   dplyr::filter(grepl("^TV", category))
 
-# Debut week per (show, season)
 tv_debut <- tv_only |>
   dplyr::group_by(show_title, season_title) |>
   dplyr::summarise(debut_week = min(week), .groups = "drop")
 
-# Count countries where it charted *in that same debut week*
 debut_spread <- tv_only |>
   dplyr::inner_join(tv_debut, by = c("show_title","season_title")) |>
   dplyr::filter(week == debut_week) |>
@@ -335,7 +344,6 @@ td_week      <- top_debut$debut_week[[1]]
 td_countries <- top_debut$countries[[1]]
 td_label     <- if (is.na(td_season) || td_season == "N/A") td_title else paste0(td_title, " — ", td_season)
 
-# Optional: show a quick table of the top 10 widest debuts
 if (requireNamespace("DT", quietly = TRUE)) {
   DT::datatable(
     head(debut_spread, 10),
@@ -398,15 +406,12 @@ if (!requireNamespace("stringr", quietly = TRUE))   install.packages("stringr")
 if (!requireNamespace("scales", quietly = TRUE))    install.packages("scales")
 library(dplyr); library(lubridate); library(stringr); library(scales)
 
-# ---- Safety checks ----
 stopifnot(exists("COUNTRY_TOP_10"))
 
-# Ensure 'week' is Date
 if (!inherits(COUNTRY_TOP_10$week, "Date")) {
   COUNTRY_TOP_10 <- COUNTRY_TOP_10 %>% mutate(week = as.Date(week))
 }
 
-# ---- India slice + US titles (to detect India-only hits) ----
 india <- COUNTRY_TOP_10 %>% filter(country_name == "India")
 stopifnot(nrow(india) > 0)
 
@@ -416,18 +421,15 @@ us_titles <- COUNTRY_TOP_10 %>%
 
 india_only <- india %>% filter(!show_title %in% us_titles$show_title)
 
-# ---- 52-week window (recency) ----
 last_date    <- max(india$week, na.rm = TRUE)
 window_start <- last_date - 364
 india_52w    <- india %>% filter(week >= window_start)
 
-# Distinct titles that reached #1 in India in the last 52 weeks
 NO1_TITLES_52W <- india_52w %>%
   filter(weekly_rank == 1) %>%
   distinct(show_title) %>%
   nrow()
 
-# Most recent India-only #1 (if any)
 recent_india_only_no1 <- india_52w %>%
   filter(!show_title %in% us_titles$show_title, weekly_rank == 1) %>%
   arrange(desc(week)) %>%
@@ -436,8 +438,6 @@ recent_india_only_no1 <- india_52w %>%
 RIO_TITLE_LABEL <- if (nrow(recent_india_only_no1)) recent_india_only_no1$show_title[[1]] else "—"
 RIO_WEEK_LABEL  <- if (nrow(recent_india_only_no1)) as.character(recent_india_only_no1$week[[1]]) else "—"
 
-# ---- India-only hits: longest consecutive run (lifetime) ----
-# Detect runs by 7-day gaps within each (show, season)
 runs <- india_only %>%
   arrange(show_title, season_title, week) %>%
   group_by(show_title, season_title) %>%
@@ -462,7 +462,6 @@ BEST_IO_WEEKS <- if (nrow(best_india_only_run)) best_india_only_run$run_weeks[[1
 BEST_IO_START <- if (nrow(best_india_only_run)) as.character(best_india_only_run$start[[1]]) else "—"
 BEST_IO_END   <- if (nrow(best_india_only_run)) as.character(best_india_only_run$end[[1]]) else "—"
 
-# ---- Year-over-year growth proxy: distinct titles that charted in India ----
 titles_yearly <- india %>%
   mutate(year = lubridate::year(week)) %>%
   group_by(year) %>%
@@ -480,7 +479,6 @@ GROWTH_TITLES <- ifelse(length(PREV_TITLES)==0 || is.na(PREV_TITLES) || PREV_TIT
 YOY_YEAR_LABEL   <- LATEST_YEAR
 YOY_GROWTH_LABEL <- if (is.na(GROWTH_TITLES)) "n/a" else paste0(scales::number(GROWTH_TITLES, accuracy = 0.1), "%")
 
-# ---- Inline-friendly values ----
 NO1_TITLES_52W_LABEL <- NO1_TITLES_52W
 BEST_IO_WEEKS_LABEL  <- if (is.na(BEST_IO_WEEKS)) "—" else as.character(BEST_IO_WEEKS)
 ```
@@ -503,10 +501,8 @@ if (!requireNamespace("scales", quietly = TRUE))    install.packages("scales")
 if (!requireNamespace("ggplot2", quietly = TRUE))   install.packages("ggplot2")
 library(dplyr); library(lubridate); library(stringr); library(scales); library(ggplot2)
 
-# Safety
 stopifnot(exists("GLOBAL_TOP_10"))
 
-# Find an hours column (robust)
 hours_candidates <- c(
   "weekly_hours_viewed","hours_viewed","weekly_hours","total_hours",
   grep("hour", names(GLOBAL_TOP_10), value = TRUE, ignore.case = TRUE)
@@ -516,12 +512,10 @@ if (is.na(hours_col) || length(hours_col) == 0) {
   stop(paste0("No hours column in GLOBAL_TOP_10. Columns: ", paste(names(GLOBAL_TOP_10), collapse=", ")))
 }
 
-# Ensure week is Date
 if (!inherits(GLOBAL_TOP_10$week, "Date")) {
   GLOBAL_TOP_10 <- GLOBAL_TOP_10 %>% mutate(week = as.Date(week))
 }
 
-# Slices
 tv_all  <- GLOBAL_TOP_10 %>% filter(str_detect(category, "^TV"))
 tv_non  <- GLOBAL_TOP_10 %>% filter(str_detect(category, "^TV") & str_detect(category, "Non-English"))
 
@@ -530,13 +524,11 @@ window_start <- last_date - 364
 tv_all_52w   <- tv_all %>% filter(week >= window_start)
 tv_non_52w   <- tv_non %>% filter(week >= window_start)
 
-# Metrics (last 52w)
 hours_tv_52w   <- sum(tv_all_52w[[hours_col]], na.rm = TRUE)
 hours_non_52w  <- sum(tv_non_52w[[hours_col]], na.rm = TRUE)
 share_non_52w  <- ifelse(hours_tv_52w == 0, NA_real_, hours_non_52w / hours_tv_52w)
 distinct_non_52w <- n_distinct(tv_non_52w$show_title)
 
-# Leaders (last 52w)
 leaders_52w <- tv_non_52w %>%
   group_by(show_title) %>%
   summarise(total_hours = sum(.data[[hours_col]], na.rm = TRUE), .groups = "drop") %>%
@@ -547,7 +539,6 @@ TOP1_HOURS <- if (nrow(leaders_52w) >= 1) leaders_52w$total_hours[1] else NA_rea
 TOP2_NAME  <- if (nrow(leaders_52w) >= 2) leaders_52w$show_title[2] else "—"
 TOP2_HOURS <- if (nrow(leaders_52w) >= 2) leaders_52w$total_hours[2] else NA_real_
 
-# YoY (calendar years)
 non_yearly <- tv_non %>%
   mutate(year = year(week)) %>%
   group_by(year) %>%
@@ -563,7 +554,6 @@ growth_pct   <- ifelse(length(hours_prev)==0 || is.na(hours_prev) || hours_prev=
                        100 * (hours_latest - hours_prev) / hours_prev)
 GROWTH_WORD  <- ifelse(!is.na(growth_pct) & growth_pct < 0, "declined", "grew")
 
-# Labels for inline text
 NON_HOURS_52W_LABEL <- comma(hours_non_52w)
 TV_HOURS_52W_LABEL  <- comma(hours_tv_52w)
 NON_SHARE_LABEL     <- if (is.na(share_non_52w)) "n/a" else percent(share_non_52w, accuracy = 0.1)
@@ -574,7 +564,6 @@ YOY_YEAR_LABEL      <- LATEST_YEAR
 YOY_GROWTH_LABEL    <- if (is.na(growth_pct)) "n/a" else paste0(number(growth_pct, accuracy = 0.1), "%")
 YOY_GROWTH_WORD     <- GROWTH_WORD
 
-# Save a top-10 table for the plot
 top10_non_52w <- leaders_52w %>% slice_head(n = 10) %>%
   mutate(show_title = reorder(show_title, total_hours))
 assign("top10_non_52w", top10_non_52w, envir = .GlobalEnv)
