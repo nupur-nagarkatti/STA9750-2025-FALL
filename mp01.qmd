@@ -5,11 +5,28 @@ format:
   html:
     toc: true
     code-fold: true
+    code-tools: true
+execute:
+  echo: true
 ---
+
+# Introduction
+
+Netflix continues to dominate the global streaming market, not only by producing blockbuster films and shows, but also by creating regional content that resonates with audiences worldwide. Understanding what succeeds on the platform is critical for both strategy and public relations.  
+
+This mini-project uses two publicly available datasets from Netflix’s Top 10 lists:
+
+Global Top 10 (all-weeks-global.tsv), which covers weekly worldwide rankings.
+
+Country Top 10 (country-weekly-top-10.tsv), which captures weekly rankings for more than 90 individual countries.
+
+Both datasets were imported into R, cleaned, and explored to evaluate viewing patterns across languages, regions, and formats. Placeholder values such as “N/A” were converted into proper missing values to ensure accurate analysis. Exploratory analysis highlighted trends in audience engagement, longevity of popular titles, and regional differences in viewership.
+
+The results are presented in the form of press releases, blending statistical findings with clear narrative framing. This approach demonstrates the importance of combining technical data analysis with effective communication, a skill that is essential for data professionals working in media and entertainment.
 
 ## Task 1: Data Acquisition
 
-```{r download, echo=FALSE, message=FALSE, warning=FALSE}
+```{r download, message=FALSE, warning=FALSE}
 # Create folder & download the two Netflix TSVs (saved with .csv names per assignment)
 if (!dir.exists(file.path("data", "mp01"))) {
   dir.create(file.path("data", "mp01"), showWarnings = FALSE, recursive = TRUE)
@@ -33,7 +50,7 @@ if (!file.exists(COUNTRY_TOP_10_FILENAME)) {
 }
 ```
 
-```{r verify-downloads, echo=FALSE}
+```{r verify-downloads, echo=TRUE}
 # Show that files exist and have non-zero size
 list.files("data/mp01")
 
@@ -43,7 +60,7 @@ file.info("data/mp01/country_top10_alltime.csv")[, c("size","mtime")]
 
 ## Task 2: Import & Clean (Global table)
 
-```{r import-global, echo=FALSE, message=FALSE, warning=FALSE}
+```{r import-global, echo=TRUE, message=FALSE, warning=FALSE}
 # Packages
 if (!requireNamespace("readr", quietly = TRUE)) install.packages("readr")
 if (!requireNamespace("dplyr", quietly = TRUE)) install.packages("dplyr")
@@ -68,7 +85,7 @@ GLOBAL_TOP_10 |>
 
 ## Task 3: Import with NA handling (Country table)
 
-```{r import-country, echo=FALSE, message=FALSE, warning=FALSE}
+```{r import-country, echo=TRUE, message=FALSE, warning=FALSE}
 COUNTRY_TOP_10 <- readr::read_tsv(
   COUNTRY_TOP_10_FILENAME,
   na = c("N/A", ""),
@@ -84,7 +101,7 @@ zero_na_strings
 
 ### Q1. How many countries?
 
-```{r q1-countries, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q1-countries, echo=TRUE, message=FALSE, warning=FALSE}
 # Count distinct countries (your data has `country_name`)
 countries_n <- COUNTRY_TOP_10 |>
   dplyr::distinct(country_name) |>
@@ -95,7 +112,7 @@ Netflix operates in **`r countries_n`** countries based on distinct country name
 
 ### Q2. Longest-running Non-English film (Global Top 10)
 
-```{r q2-nonenglish, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q2-nonenglish, echo=TRUE, message=FALSE, warning=FALSE}
 if (!requireNamespace("stringr", quietly = TRUE)) install.packages("stringr")
 library(stringr)
 
@@ -116,7 +133,7 @@ noneng_weeks <- noneng_top$max_weeks[[1]]
 
 ### Q3. Longest film (in minutes) to appear in the Global Top 10
 
-```{r q3-longest-film, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q3-longest-film, echo=TRUE, message=FALSE, warning=FALSE}
 # Look at Films (English & Non-English), keep rows with known runtime, convert to minutes
 longest_film <- GLOBAL_TOP_10 |>
   dplyr::filter(grepl("^Films", category)) |>
@@ -132,7 +149,7 @@ longest_minutes <- longest_film$runtime_minutes[[1]]
 
 ### Q4. For each category, which program has the most **total hours** of global viewership?
 
-```{r q4-top-hours, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q4-top-hours, echo=TRUE, message=FALSE, warning=FALSE}
 # Sum hours across all weeks, per (category, title); pick the top per category
 if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
 if (!requireNamespace("DT", quietly = TRUE)) install.packages("DT")
@@ -155,7 +172,7 @@ DT::datatable(
 ```
 ### Q5. Which TV show had the longest run in a country’s Top 10?
 
-```{r q5-longest-run, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q5-longest-run, echo=TRUE, message=FALSE, warning=FALSE}
 # Longest *consecutive* run: detect continuity by 7-day gaps
 tv_runs <- COUNTRY_TOP_10 |>
   dplyr::filter(grepl("^TV", category)) |>
@@ -189,7 +206,7 @@ best_label   <- if (is.na(best_season) || best_season == "N/A") best_show else p
 
 ### Q6. Which country has < 200 weeks of service history, and when did Netflix cease operations there?
 
-```{r q6-short-history, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q6-short-history, echo=TRUE, message=FALSE, warning=FALSE}
 short_hist <- COUNTRY_TOP_10 |>
   dplyr::group_by(country_name) |>
   dplyr::summarise(
@@ -209,7 +226,7 @@ short_last    <- short_hist$last_week[[1]]
 
 ### Q7. What is the total global viewership (hours) of *Squid Game* across all seasons?
 
-```{r q7-squid-hours, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q7-squid-hours, echo=TRUE, message=FALSE, warning=FALSE}
 # Sum global hours for all seasons of Squid Game in the global table
 squid <- GLOBAL_TOP_10 |>
   dplyr::filter(grepl("^TV", category),
@@ -229,7 +246,7 @@ squid_by_season <- squid |>
 
 ### Q8. Approximate 2021 views for *Red Notice* (runtime 1h 58m)
 
-```{r q8-red-notice-views, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q8-red-notice-views, echo=TRUE, message=FALSE, warning=FALSE}
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate", repos = "https://cloud.r-project.org")
 library(lubridate)
 
@@ -247,7 +264,7 @@ rn_2021_views <- rn_2021_hours / rn_runtime_hours
 
 ### Q9. How many Films reached #1 in the US but did not debut at #1? Which is the most recent?
 
-```{r q9-us-films, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q9-us-films, echo=TRUE, message=FALSE, warning=FALSE}
 # Filter US films (both English & Non-English)
 us_films <- COUNTRY_TOP_10 |>
   dplyr::filter(grepl("^Films", category),
@@ -292,7 +309,7 @@ The most recent was **`r mr_title`**, which debuted at **`r mr_debut_rank`** and
 
 ### Q10. Which TV show/season hit the Top 10 in the most countries in its debut week?
 
-```{r q10-debut-most-countries, echo=FALSE, message=FALSE, warning=FALSE}
+```{r q10-debut-most-countries, echo=TRUE, message=FALSE, warning=FALSE}
 tv_only <- COUNTRY_TOP_10 |>
   dplyr::filter(grepl("^TV", category))
 
@@ -332,7 +349,7 @@ if (requireNamespace("DT", quietly = TRUE)) {
 
 ## Task 5: Press Release 1 — Stranger Things (Task 5)
 
-```{r pr_stranger_metrics_calm, echo=FALSE, message=FALSE, warning=FALSE}
+```{r pr_stranger_metrics_calm, echo=TRUE, message=FALSE, warning=FALSE}
 library(dplyr); library(scales)
 
 st_global <- GLOBAL_TOP_10 %>%
@@ -363,13 +380,17 @@ peer2_name  <- peers$show_title[2]
 peer2_hours <- peers$total_hours[2]
 ```
 
-### Stranger Things: a proven global hit ahead of Season 5
 
-*Stranger Things* has delivered **`r comma(st_total_hours)`** hours of Top-10 viewing across **`r st_weeks_global`** weeks worldwide. The series reached audiences in **`r st_countries`** countries. Among English-language TV series on Netflix, it ranks **#`r st_rank`** by lifetime Top-10 hours. For context, recent leaders include **`r peer1_name`** with **`r comma(peer1_hours)`** hours and **`r peer2_name`** with **`r comma(peer2_hours)`** hours. Season 5 will arrive with a strong and established global audience.
+### Stranger Things: A Proven Global Hit Ahead of Season 5
+
+Netflix’s cultural phenomenon *Stranger Things* continues to stand as the benchmark for global entertainment success. Across its first four seasons, the series has delivered **2,967,980,000 hours of Top-10 viewing in 93 countries over 20 weeks**. No other English-language TV show has matched its staying power, with *Stranger Things* holding the **#1 spot by lifetime Top-10 hours**.  
+
+The show’s dominance eclipses other record-setters, including *Wednesday* with 2,876,350,000 hours and *Bridgerton* with 2,279,710,000 hours. With Season 5 set to debut, *Stranger Things* arrives with not only a loyal global following but also a proven record of sustained impact that continues to define Netflix’s brand of world-class storytelling.  
+
 
 ## Task 6: Press Release 2: Netflix in India
 
-```{r pr_india_prep, echo=FALSE, message=FALSE, warning=FALSE}
+```{r pr_india_prep, echo=TRUE, message=FALSE, warning=FALSE}
 # ---- Packages ----
 if (!requireNamespace("dplyr", quietly = TRUE))    install.packages("dplyr")
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate")
@@ -463,13 +484,17 @@ YOY_GROWTH_LABEL <- if (is.na(GROWTH_TITLES)) "n/a" else paste0(scales::number(G
 NO1_TITLES_52W_LABEL <- NO1_TITLES_52W
 BEST_IO_WEEKS_LABEL  <- if (is.na(BEST_IO_WEEKS)) "—" else as.character(BEST_IO_WEEKS)
 ```
-### Netflix in India: Local Hits Power a Breakout Year
+### Netflix in India: Local Hits Power a Breakout Year  
 
-Over the **last 52 weeks**, **`r NO1_TITLES_52W_LABEL`** different titles reached **#1** in India. Locally resonant storytelling continues to lead the way: the longest India-only Top-10 run belonged to **`r BEST_IO_LABEL`**, holding for **`r BEST_IO_WEEKS_LABEL`** consecutive weeks (**`r BEST_IO_START`** to **`r BEST_IO_END`**). Discovery breadth is growing too—calendar **`r YOY_YEAR_LABEL`** saw a **`r YOY_GROWTH_LABEL`** increase in the number of distinct titles appearing in India’s Top-10. The most recent India-only chart-topper was **`r RIO_TITLE_LABEL`** (week of **`r RIO_WEEK_LABEL`**). Together, these indicators highlight Netflix’s accelerating momentum in India and the expanding appeal of its locally produced hits.
+Over the past 52 weeks, Netflix India has delivered a record-breaking slate of successes, with **55 different titles** reaching the #1 spot. Locally resonant storytelling is driving this surge — *Sooryavanshi* set the benchmark with an extraordinary **18-week Top-10 run** from December 2021 to April 2022.  
+
+Discovery breadth is also expanding. In 2025 alone, the number of distinct titles in India’s Top-10 chart grew by **31.2%**, signaling a hungry audience eager for variety. Most recently, *Mahavatar Narsimha* (week of September 28, 2025) stormed to the top, proving Netflix’s investment in local content continues to pay off.  
+
+Together, these milestones underscore Netflix’s accelerating momentum in India — a market where original stories aren’t just popular, they’re *unstoppable*.  
 
 ## Task 7: Press Release 3: Global Non-English TV
 
-```{r pr3_noneng_prep, echo=FALSE, message=FALSE, warning=FALSE}
+```{r pr3_noneng_prep, echo=TRUE, message=FALSE, warning=FALSE}
 # Packages
 if (!requireNamespace("dplyr", quietly = TRUE))    install.packages("dplyr")
 if (!requireNamespace("lubridate", quietly = TRUE)) install.packages("lubridate")
@@ -554,13 +579,22 @@ top10_non_52w <- leaders_52w %>% slice_head(n = 10) %>%
   mutate(show_title = reorder(show_title, total_hours))
 assign("top10_non_52w", top10_non_52w, envir = .GlobalEnv)
 ```
-### Global Non-English TV: The World Is Bingeing Beyond English
+### Global Non-English TV: The World Is Bingeing Beyond English  
 
-In the **last 52 weeks**, viewers spent **`r NON_HOURS_52W_LABEL`** hours watching Non-English TV on Netflix—**`r NON_SHARE_LABEL`** of all TV Top-10 hours (**`r TV_HOURS_52W_LABEL`** total). Audience choice remained broad, with **`r DISTINCT_NON_52W`** distinct Non-English series appearing in the global Top-10. Leading the wave were **`r TOP1_NAME`** (**`r TOP1_HOURS_LABEL`** hours) and **`r TOP2_NAME`** (**`r TOP2_HOURS_LABEL`** hours). Year over year, Non-English TV Top-10 hours **`r YOY_GROWTH_WORD`** **`r YOY_GROWTH_LABEL`** (calendar **`r YOY_YEAR_LABEL`**), underscoring the sustained global pull of stories told beyond English.
+Over the past year, Netflix viewers have turned the world into a stage where language is no barrier to obsession. In just 52 weeks, audiences poured more than **11.5 billion hours** into Non-English TV — nearly **half of all Top-10 TV hours** worldwide (**44.7% out of 25.8 billion total**). This isn’t a side trend. It is a global movement redefining what it means to be a hit.  
+
+The sheer range of programming speaks volumes: **169 different Non-English series** climbed into the global Top-10 in the past year. From Korean dramas to Spanish thrillers, from Japanese anime to Hindi blockbusters, international titles are no longer niche. They are driving the conversation, commanding the spotlight, and proving their staying power on the biggest stage in streaming.  
+
+Leading this cultural wave are titles that have already become household names across continents. *Squid Game* alone captured an extraordinary **2.7 billion hours of viewing**, securing its status as one of the most influential shows of the decade. Hot on its heels, *When Life Gives You Tangerines* broke through as a fresh global sensation, racking up nearly **482 million hours** and signaling that lightning can indeed strike more than once in the Non-English arena.  
+
+Even as total Non-English Top-10 hours slipped **–3.2% year-over-year in 2025**, the demand has hardly slowed. Instead, the takeaway is clear: global audiences are diversifying their tastes, exploring new genres, and proving that they are ready for more than Hollywood’s playbook.  
+
+Netflix isn’t just offering shows — it is exporting cultural phenomena. The world is no longer just watching English-language hits. It is **bingeing without borders**.  
+
 
 ## Extra credit: simple bar chart of the Top 10 Non-English TV titles (last 52 weeks)
 
-```{r pr3_chart, echo=FALSE, message=FALSE, warning=FALSE}
+```{r pr3_chart, echo=TRUE, message=FALSE, warning=FALSE}
 if (exists("top10_non_52w") && nrow(top10_non_52w) > 0) {
   ggplot(top10_non_52w, aes(x = show_title, y = total_hours)) +
     geom_col() +
