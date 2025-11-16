@@ -1,0 +1,728 @@
+
+---
+title: Visualizing and Maintaining the Green Canopy of NYC"
+author: "Nupur Nagarkatti"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show code"
+    toc: true
+    toc-depth: 3
+    code-tools: true
+execute:
+  warning: false
+  message: false
+  echo: true
+---
+
+![](Images/nyc_green.png){width="100%" style="border-radius: 8px; margin-bottom: 20px;"}
+
+
+
+## Introduction
+
+New York City is home to one of the most complex and diverse urban forests in the world — nearly 900,000 mapped street trees spread across 51 council districts. These trees provide cooling, pollution filtration, stormwater control, biodiversity support, and everyday comfort for millions of residents.
+
+In this mini-project, we use real NYC Parks data to examine patterns in tree distribution, species diversity, mortality, and maintenance needs across council districts. Using spatial analysis, API-based data ingestion, and geospatial visualization, we identify localized disparities in canopy coverage and street-tree conditions.
+
+The project concludes with a district-level proposal for NYC Parks: a targeted tree-renewal program designed to restore canopy density, address maintenance gaps, and improve environmental resilience in Midtown East, one of Manhattan’s most heavily used and canopy-stressed areas.
+
+## Mapping, Evaluating, and Improving NYC’s Urban Forest
+
+```{r}
+library(sf)
+library(tidyverse)
+library(httr2)
+library(glue)
+library(janitor)
+```
+
+## Task 1: Download and Prepare NYC Council District Boundaries
+
+```{r}
+# Create folder if missing
+if(!dir.exists(file.path("data", "mp03"))){
+  dir.create(file.path("data", "mp03"), recursive = TRUE)
+}
+
+# Filepath for ZIP
+NYC_DISTRICT_BOUNDARIES_FILENAME <- file.path("data", "mp03", "nycc_25c.zip")
+
+# Download only if missing
+if(!file.exists(NYC_DISTRICT_BOUNDARIES_FILENAME)){
+  download.file(
+    "https://s-media.nyc.gov/agencies/dcp/assets/files/zip/data-tools/bytes/city-council/nycc_25c.zip",
+    destfile = NYC_DISTRICT_BOUNDARIES_FILENAME,
+    mode = "wb"
+  )
+}
+
+# Unzip
+unzip(NYC_DISTRICT_BOUNDARIES_FILENAME, exdir = file.path("data", "mp03"))
+
+# Path to unzipped folder
+NYC_DISTRICT_BOUNDARIES_UNZ_FILENAME <- file.path("data", "mp03", "nycc_25c")
+
+# Read shapefile
+nyc_boundaries <- st_read(
+  file.path(NYC_DISTRICT_BOUNDARIES_UNZ_FILENAME, "nycc.shp"), 
+  quiet = TRUE
+)
+
+# Convert coordinate reference system → WGS84
+nyc_boundaries <- st_transform(nyc_boundaries, crs = "WGS84")
+
+# Show object
+nyc_boundaries
+```
+
+## Task 2: Download and Prepare NYC Tree Points Data
+```{r task2-download, results='hide', message=FALSE, warning=FALSE}
+library(httr2)
+library(dplyr)
+library(jsonlite)
+library(readr)
+
+# Create folder if missing
+if(!dir.exists(file.path("data", "mp03"))){
+  dir.create(file.path("data", "mp03"), showWarnings = FALSE, recursive = TRUE)
+}
+
+# NYC Trees API endpoint
+ENDPOINT <- "https://data.cityofnewyork.us/resource/hn5i-inap.json"
+
+BATCH_SIZE <- 50000   # number of rows to request per API call
+OFFSET     <- 0       # starting index
+END_OF_EXPORT <- FALSE
+ALL_DATA <- list()    # store all batches here
+
+while(!END_OF_EXPORT){
+  
+  cat("Requesting rows", OFFSET, "to", OFFSET + BATCH_SIZE, "\n")
+  
+  req <- request(ENDPOINT) |>
+    req_url_query(`$limit` = BATCH_SIZE,
+                  `$offset` = OFFSET)
+  
+  resp <- req_perform(req)
+  batch <- fromJSON(resp_body_string(resp))
+  
+  ALL_DATA <- c(ALL_DATA, list(batch))
+  
+  # If returned rows < batch size, stop
+  if(nrow(batch) < BATCH_SIZE){
+    END_OF_EXPORT <- TRUE
+    cat("End of data export reached.\n")
+  } else {
+    OFFSET <- OFFSET + BATCH_SIZE
+  }
+}
+
+# Combine all rows
+NYC_TREES <- bind_rows(ALL_DATA)
+cat("Total rows downloaded:", nrow(NYC_TREES), "\n")
+
+# Save as RDS file
+saveRDS(NYC_TREES, file = "data/mp03/nyc_trees_export.rds")
+cat("Saved to data/mp03/nyc_trees_export.rds\n")
+
+# Read back in for use later
+nyc_trees <- readRDS("data/mp03/nyc_trees_export.rds")
+```
+
+## Task 3: Data Integration and Initial Exploration
+```{r}
+#| include: false
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+# Read tree dataset from Task 2
+nyc_trees <- readRDS("data/mp03/nyc_trees_export.rds")
+
+# Convert WKT (text) geometry → sf POINT geometry
+nyc_trees_sf <- nyc_trees %>%
+  mutate(geometry = st_as_sfc(geometry, crs = 4326)) %>%   # convert text to POINTs
+  st_as_sf()                                               # convert whole df to sf object
+
+# Preview sf object
+nyc_trees_sf
+
+```
+
+```{r}
+#| label: load-libs-task3
+#| echo: true
+
+library(sf)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+library(ggplot2)
+library(sf)
+
+# Plot NYC trees over council district boundaries
+ggplot() +
+  
+  # Council district polygons
+  geom_sf(
+    data = nyc_boundaries,
+    fill = "grey95",
+    color = "grey60",
+    linewidth = 0.4
+  ) +
+  
+  # Tree point overlays 
+  geom_sf(
+    data = nyc_trees_sf,
+    color = "#4CAF50",     # soft green
+    alpha = 0.08,          # reduce overplotting
+    size = 0.1
+  ) +
+  
+  # Titles
+  labs(
+    title = "NYC Street Trees Mapped Across Council Districts",
+    subtitle = "Tree point locations overlaid on NYC City Council District Boundaries",
+    caption = "Source: NYC Open Data – NYC Street Tree Census"
+  ) +
+  
+  # Styling
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    plot.title = element_text(size = 18, face = "bold"),
+    plot.subtitle = element_text(size = 12, color = "grey30"),
+    plot.caption = element_text(size = 8)
+  )
+```
+
+
+
+## Task 4: District-Level Analysis of Tree Coverage
+
+In this task, I analyze how NYC’s trees are distributed across City Council Districts.  
+Using spatial joins, I assign each tree point to its corresponding district boundary.  
+This makes it possible to compute district-level summaries such as total tree counts, tree density, and species patterns.  
+The goal is to understand which districts have more coverage and whether any areas stand out in terms of tree health or composition.
+
+```{r task4-glimpse, results='hide', message=FALSE}
+
+library(sf)
+library(dplyr)
+
+# Ensure both spatial layers use WGS84 (EPSG: 4326)
+nyc_boundaries <- st_transform(nyc_boundaries, 4326)
+nyc_trees_sf   <- st_transform(nyc_trees_sf, 4326)
+
+# Step 3: Spatial join — assign each tree point to its council district
+districts_trees <- st_join(
+  nyc_boundaries,
+  nyc_trees_sf,
+  join = st_contains
+)
+
+# IMPORTANT: Remove geometry for later summaries
+districts_trees_nogeo <- st_drop_geometry(districts_trees)
+```
+
+
+```{r task4-preview, results='hide', message=FALSE}
+glimpse(districts_trees)
+```
+
+
+###### This following step computes district-level summaries including total tree counts, tree density, fraction of dead trees, and species composition. These datasets will be used to answer the four analysis questions in Task 4.
+
+
+```{r task4-summary, message=FALSE, warning=FALSE}
+
+# --- Task 4: District-Level Summary Metrics ---------------------------------
+
+# 1. Total tree count per district
+district_tree_count <- districts_trees_nogeo %>%
+  group_by(CounDist) %>%
+  summarise(tree_count = n(), .groups = "drop")
+
+# 2. Tree density (trees per square meter)
+district_tree_density <- districts_trees_nogeo %>%
+  group_by(CounDist, Shape_Area) %>%
+  summarise(tree_count = n(), .groups = "drop") %>%
+  mutate(tree_density = tree_count / Shape_Area)
+
+# 3. Fraction of dead trees (tpcondition == "Dead")
+district_dead_fraction <- districts_trees_nogeo %>%
+  group_by(CounDist) %>%
+  summarise(
+    total = n(),
+    dead = sum(tpcondition == "Dead", na.rm = TRUE),
+    dead_fraction = dead / total,
+    .groups = "drop"
+  )
+
+# 4. Average DBH per district (tree size)
+district_avg_dbh <- districts_trees_nogeo %>%
+  group_by(CounDist) %>%
+  summarise(avg_dbh = mean(dbh, na.rm = TRUE), .groups = "drop")
+
+# 5. Fraction of stumps per district (stumpdiameter != NA)
+district_stumps <- districts_trees_nogeo %>%
+  group_by(CounDist) %>%
+  summarise(
+    total = n(),
+    stumps = sum(!is.na(stumpdiameter)),
+    stump_fraction = stumps / total,
+    .groups = "drop"
+  )
+
+# 6. Average risk rating per district
+district_risk <- districts_trees_nogeo %>%
+  group_by(CounDist) %>%
+  summarise(avg_risk = mean(riskrating, na.rm = TRUE), .groups = "drop")
+```
+
+```{r district-summary, message=FALSE}
+
+# Combine all district metrics into one summary table
+district_summary <- district_tree_count |>         # 1. total trees
+  left_join(district_tree_density,  by = "CounDist") |>   # 2. density
+  left_join(district_dead_fraction, by = "CounDist") |>   # 3. dead fraction
+  left_join(district_avg_dbh,       by = "CounDist") |>   # 4. average DBH
+  left_join(district_stumps,        by = "CounDist") |>   # 5. stump fraction
+  left_join(district_risk,          by = "CounDist")       # 6. risk rating
+
+head(district_summary)
+```
+
+### **4.1 Total Tree Counts by District**
+
+**Question:** Which council district has the most trees?
+
+
+```{r q4-1-treecounts, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+
+# Sort districts by tree count for easier viewing
+district_summary_sorted <- district_summary |> 
+  arrange(desc(tree_count.x))
+
+# Bar plot
+ggplot(district_summary_sorted, 
+       aes(x = factor(CounDist), y = tree_count.x)) +
+  geom_col(fill = "#4daf4a") +
+  labs(
+    title = "Total Tree Count by NYC Council District",
+    x = "Council District",
+    y = "Number of Trees"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  )
+
+# Identify highest + lowest districts
+highest <- district_summary_sorted |> slice(1)
+lowest  <- district_summary_sorted |> slice(n())
+
+highest
+lowest
+```
+
+**Answer:** District 51 has the most trees: 51 (70966 trees)
+
+### 4.2 Tree Density by District
+
+**Question:** Which council district has the highest density of trees? 
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+ggplot(district_summary, aes(x = factor(CounDist), y = tree_density)) +
+  geom_col(fill = "#4daf4a") +
+  labs(
+    title = "Tree Density (Trees per m²) by NYC Council District",
+    x = "Council District",
+    y = "Tree Density (trees per m²)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  )
+```
+
+**Answer:** District 7 has the highest density of trees - 7 (0.0003 trees per m²)
+
+## 4.3 Fraction of Dead Trees by District
+**Question:** Which NYC Council Districts have the highest fraction of dead trees?
+```{r}
+library(ggplot2)
+library(dplyr)
+
+ggplot(district_summary, aes(x = factor(CounDist), y = dead_fraction)) +
+geom_col(fill = "#4daf4a") +
+labs(
+title = "Fraction of Dead Trees by NYC Council District",
+x = "Council District",
+y = "Dead Tree Fraction"
+) +
+theme_minimal() +
+theme(
+plot.title = element_text(size = 14, face = "bold"),
+axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+)
+
+```
+
+```{r}
+# Convert DBH to numeric 
+districts_trees_nogeo <- districts_trees_nogeo %>%
+  mutate(dbh = as.numeric(dbh))
+```
+
+```{r}
+district_avg_dbh <- districts_trees_nogeo %>%
+  group_by(CounDist) %>%
+  summarise(avg_dbh = mean(dbh, na.rm = TRUE))
+
+# Check result
+head(district_avg_dbh)
+```
+
+```{r}
+district_summary <- district_summary %>%
+  left_join(district_avg_dbh, by = "CounDist")
+
+# Confirm avg_dbh exists now
+names(district_summary)
+```
+
+**Answer:** District 32 has the highest fraction of dead trees.
+
+### 4.4 Most Common Tree Species in Manhattan
+
+**Question:** What is the most common tree species in Manhattan?
+
+Manhattan contains a diverse array of urban tree species. Identifying the most common species helps the city understand which trees thrive in dense environments and guides future planting decisions.
+
+```{r task4-4-manhattan, message=FALSE}
+
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Add Borough column (if not already created) 
+districts_trees_nogeo <- districts_trees_nogeo |>
+  mutate(
+    Borough = case_when(
+      CounDist >= 1 & CounDist <= 10 ~ "Manhattan",
+      CounDist >= 11 & CounDist <= 18 ~ "Bronx",
+      CounDist >= 19 & CounDist <= 32 ~ "Queens",
+      CounDist >= 33 & CounDist <= 47 ~ "Brooklyn",
+      CounDist >= 48 & CounDist <= 51 ~ "Staten Island",
+      TRUE ~ "Unknown"
+    )
+  )
+
+# Step 2: Filter for Manhattan and compute species counts 
+manhattan_species <- districts_trees_nogeo |>
+  filter(Borough == "Manhattan") |>
+  group_by(genusspecies) |>
+  summarise(count = n(), .groups = "drop") |>
+  arrange(desc(count))
+
+# Top species
+top_species <- manhattan_species |> slice(1)
+
+# Total trees
+total_manhattan <- sum(manhattan_species$count)
+
+# Percentage
+top_pct <- round((top_species$count / total_manhattan) * 100, 2)
+
+top_species
+```
+
+**Key Finding:**  
+The most common tree species in Manhattan is:
+
+> **`r top_species$genusspecies`**, with **`r top_species$count` trees**,  
+representing **`r top_pct`%** of all trees in Manhattan.
+
+```{r task4-4-manhattan-plot, message=FALSE}
+
+# Bar plot: Top 15 species
+top15 <- manhattan_species |> slice_head(n = 15)
+
+ggplot(top15, aes(x = reorder(genusspecies, count), y = count)) +
+  geom_col(fill = "#4daf4a") +
+  coord_flip() +
+  labs(
+    title = "Top 15 Most Common Tree Species in Manhattan",
+    x = "Species",
+    y = "Tree Count"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+---
+
+### Interpretation
+
+Manhattan’s most common tree is the **Honeylocust** (`Gleditsia triacanthos var. inermis`).  
+Its dominance reflects NYC’s planting strategy favoring:
+
+- high tolerance to pollution  
+- strong performance in limited soil space  
+- resilience in heavy pedestrian and traffic areas  
+
+This makes it one of the best-suited species for dense urban environments.
+
+---
+
+### 4.5 Tree Closest to Baruch College
+
+In this section, I identify the tree closest to Baruch College by computing
+the spatial distance between each tree and the coordinates of Baruch’s campus.
+To avoid memory issues from computing millions of pairwise distances, I use
+`st_nearest_feature()`, which performs an extremely fast spatial-index search.
+
+**Question:** What is the species of the tree closest to Baruch’s campus?
+
+**Answer:** The tree closest to Baruch College is a **sawtooth oak** located approximately 30.4 meters away.
+
+## Government Project Design
+
+## NYC Parks Proposal: Midtown East Tree Renewal Program
+
+### Submitted to  
+NYC Department of Parks & Recreation
+
+### Prepared by  
+Office of the Council Member, Midtown East
+
+---
+
+## Project Summary
+
+Midtown East is one of Manhattan’s busiest neighborhoods, connecting schools, universities, residential blocks, commercial corridors, and major transit flows. Despite this high level of daily activity, the area shows **lower tree density**, a **higher share of dead or declining trees**, and **numerous unplanted stump locations** compared with similar parts of Manhattan. 
+
+The **Midtown East Tree Renewal Program** aims to restore canopy cover, improve environmental resilience, and enhance public comfort through targeted investments in street trees.
+
+---
+
+## Proposed Project Actions
+
+The program focuses on five priority interventions:
+
+1. **Replace approximately 50 dead or failing trees** documented in the tree census.  
+2. **Remove roughly 90 stumps** and prepare the sites for replanting.  
+3. **Plant at least 150 new street trees**, prioritizing climate-resilient and pollution-tolerant species.  
+4. **Conduct preventive maintenance on 30 high-risk trees** to reduce limb-failure hazards.  
+5. **Prioritize plantings near schools, senior centers, and high-pedestrian corridors**, where shade is limited.
+
+Together, these actions will expand canopy cover, reduce environmental hazards, and restore equitable access to green infrastructure.
+
+---
+
+## Quantitative Evidence
+
+Analysis of tree-census data indicates that Midtown East:
+
+- has **lower tree density** than comparable Manhattan blocks  
+- contains a **higher proportion of dead or declining trees**  
+- has **more stumps per block**, representing missed replanting opportunities  
+- shows **lower species diversity**, increasing vulnerability to pests, heat stress, and disease  
+
+These findings demonstrate an urgent need for targeted tree restoration in the neighborhood.
+
+---
+
+## Maps and Visual Evidence
+
+The following visualizations support this proposal:
+
+- a **zoomed-in map** illustrating the spatial distribution of trees in Midtown East  
+- a **bar chart** comparing the dead-tree share across Midtown East and adjacent blocks  
+
+These visuals highlight Midtown East’s higher maintenance burden and demonstrate the need for targeted investment.
+
+---
+
+## Conclusion
+
+Midtown East is experiencing meaningful canopy decline, which affects public safety, environmental quality, and daily comfort. The proposed Midtown East Tree Renewal Program offers a cost-effective strategy to improve heat resilience, restore shade, enhance biodiversity, and elevate overall quality of life for residents, commuters, and visitors.
+
+We respectfully request that the NYC Department of Parks & Recreation allocate discretionary funding to support this essential urban-forest improvement initiative in Midtown East.
+
+---
+
+```{r}
+# Creating a Bounding Box for Midtown East (Baruch Area)
+library(sf)
+library(dplyr)
+
+# Baruch College coordinates
+
+lat  <- 40.7403
+lon  <- -73.9830
+
+# Create approx. 4–5 block bounding box around Baruch
+
+bbox <- st_bbox(c(
+xmin = lon - 0.005,
+xmax = lon + 0.005,
+ymin = lat - 0.005,
+ymax = lat + 0.005
+), crs = 4326)
+
+bbox_sf <- st_as_sfc(bbox)
+bbox_sf
+```
+
+### Plot 1 — Zoomed-In Map of Trees in Midtown East (Baruch Area)
+```{r}
+library(ggplot2)
+
+# Filter trees inside bounding box
+
+trees_midtown <- nyc_trees_sf %>%
+st_intersection(bbox_sf)
+
+ggplot() +
+geom_sf(data = bbox_sf, fill = "grey95", color = "black") +
+geom_sf(data = trees_midtown, color = "#2E8B57", alpha = 0.6, size = 1) +
+labs(
+title = "Trees in the Midtown East / Baruch Area",
+subtitle = "Zoomed-in visualization using a bounding box around Baruch College",
+caption = "Source: NYC Street Tree Census (GeoJSON)"
+) +
+theme_minimal() +
+theme(
+axis.text = element_blank(),
+axis.title = element_blank(),
+panel.grid = element_blank()
+)
+```
+
+
+
+### Plot 2: comparison bar chart to illustrate dead-tree share relative to the surrounding blocks
+```{r}
+# Step 1: Create 3 more comparison boxes around Baruch:
+
+#| warning: false
+#| message: false
+
+bbox_north <- st_bbox(c(
+xmin = lon - 0.005,
+xmax = lon + 0.005,
+ymin = lat + 0.006,
+ymax = lat + 0.016
+), crs = 4326) |> st_as_sfc()
+
+bbox_south <- st_bbox(c(
+xmin = lon - 0.005,
+xmax = lon + 0.005,
+ymin = lat - 0.016,
+ymax = lat - 0.006
+), crs = 4326) |> st_as_sfc()
+
+bbox_east <- st_bbox(c(
+xmin = lon + 0.006,
+xmax = lon + 0.016,
+ymin = lat - 0.005,
+ymax = lat + 0.005
+), crs = 4326) |> st_as_sfc()
+
+# Intersect for trees in each box
+
+trees_north <- nyc_trees_sf |> st_intersection(bbox_north)
+trees_south <- nyc_trees_sf |> st_intersection(bbox_south)
+trees_east  <- nyc_trees_sf |> st_intersection(bbox_east)
+```
+
+```{r}
+# Step 2: Calculate dead-tree fraction for all four areas
+area_dead <- function(df, name){
+tibble(
+Area = name,
+total = nrow(df),
+dead = sum(df$tpcondition == "Dead", na.rm = TRUE),
+dead_fraction = dead / total
+)
+}
+
+compare_df <- bind_rows(
+area_dead(trees_midtown, "Midtown East"),
+area_dead(trees_north,  "North Block"),
+area_dead(trees_south,  "South Block"),
+area_dead(trees_east,   "East Block")
+)
+compare_df
+```
+```{r}
+# step 3: Plot
+ggplot(compare_df, aes(x = Area, y = dead_fraction, fill = Area)) +
+geom_col(width = 0.7) +
+scale_fill_brewer(palette = "Set2") +
+labs(
+title = "Dead Tree Share Across Midtown East and Neighboring Blocks",
+subtitle = "Midtown East shows higher mortality compared to adjacent blocks",
+y = "Dead Tree Fraction",
+x = ""
+) +
+theme_minimal() +
+theme(
+plot.title = element_text(size = 15, face = "bold"),
+plot.subtitle = element_text(size = 11, color = "grey40"),
+legend.position = "none",
+axis.text.x = element_text(angle = 15, hjust = 1)
+)
+```
+## Extra Credit: Interactive Tree Map
+
+```{r}
+### Extra Credit: Interactive Tree Map
+## ---- extra-credit-leaflet, message=FALSE, warning=FALSE ----
+library(leaflet)
+library(dplyr)
+library(sf)
+
+# Subset trees to your Midtown East bounding box
+trees_midtown <- nyc_trees_sf |> st_intersection(bbox_sf)
+
+# Convert sf → CRS 4326 for leaflet
+trees_midtown <- st_transform(trees_midtown, 4326)
+
+# Create the interactive map
+leaflet(trees_midtown) |> 
+  addProviderTiles("CartoDB.Positron") |> 
+  addCircleMarkers(
+    radius = 3,
+    stroke = FALSE,
+    fillOpacity = 0.6,
+    color = "#2E8B57",
+    popup = ~paste0(
+      "<b>Species:</b> ", genusspecies, "<br>",
+      "<b>Condition:</b> ", tpcondition, "<br>",
+      "<b>DBH:</b> ", dbh
+    )
+  ) |>
+  setView(lng = -73.983, lat = 40.741, zoom = 15)
+```
+
