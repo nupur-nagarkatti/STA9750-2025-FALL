@@ -16,7 +16,7 @@ execute:
 ---
 
 
-![](Images/nyc_green.png){width="100%" style="border-radius: 8px; margin-bottom: 20px;"}
+![](images/nyc_green.png){width="100%" style="border-radius: 8px; margin-bottom: 20px;"}
 
 
 
